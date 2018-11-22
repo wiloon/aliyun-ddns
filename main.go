@@ -4,9 +4,14 @@ import (
 	"fmt"
 	"github.com/BurntSushi/toml"
 	"github.com/codegangsta/cli"
+	"github.com/denverdino/aliyungo/dns"
 	"github.com/gutengo/fil"
 	"github.com/gutengo/shell"
+	"io/ioutil"
+	"log"
+	"net/http"
 	"os"
+	"regexp"
 )
 
 var pd = fmt.Println
@@ -46,7 +51,7 @@ GLOBAL OPTIONS:
 			Name:  "list",
 			Usage: "<domain>",
 			Action: func(c *cli.Context) {
-				pd(getIp())
+				pd(GetIp())
 				/*
 					args := c.Args()
 					if len(args) < 1 {
@@ -99,4 +104,58 @@ func loadRc() (ret Rc) {
 		shell.ErrorExit("%s: %s\n", "Load "+file, err)
 	}
 	return ret
+}
+
+func List(domain string) {
+	client := dns.NewClient(rc.ACCESS_KEY_ID, rc.ACCESS_KEY_SECRET)
+	res, err := client.DescribeDomainRecords(&dns.DescribeDomainRecordsArgs{
+		DomainName: domain,
+	})
+	if err != nil {
+		shell.ErrorExit(err)
+	}
+
+	for _, v := range res.DomainRecords.Record {
+		fmt.Println(v.RecordId, v.RR, v.Value, v.DomainName, v.Type)
+	}
+}
+
+func Update(recordId, rr, value string) error {
+	client := dns.NewClient(rc.ACCESS_KEY_ID, rc.ACCESS_KEY_SECRET)
+	_, err := client.UpdateDomainRecord(&dns.UpdateDomainRecordArgs{
+		RecordId: recordId,
+		RR:       rr,
+		Value:    value,
+		Type:     dns.ARecord,
+	})
+	return err
+}
+
+func GetIp() string {
+	res, _ := http.Get("http://pv.sohu.com/cityjson?ie=utf-8")
+	defer res.Body.Close()
+	body, _ := ioutil.ReadAll(res.Body)
+	ip := regexp.MustCompile(`\d\d\d\.\d\d\d.\d\d\d.\d\d\d`).FindString(string(body))
+	return ip
+}
+
+func Server(port string) {
+	http.HandleFunc("/", homeHandler)
+	fmt.Println(">> Listen on " + port)
+	err := http.ListenAndServe(":"+port, nil)
+	log.Fatal(err)
+}
+
+func homeHandler(res http.ResponseWriter, req *http.Request) {
+	switch req.Method {
+	case "GET":
+		rc.ACCESS_KEY_ID = req.FormValue("access_key_id")
+		rc.ACCESS_KEY_SECRET = req.FormValue("access_key_secret")
+		err := Update(req.FormValue("id"), req.FormValue("rr"), req.FormValue("value"))
+		if err != nil {
+			http.Error(res, err.Error(), 400)
+		} else {
+			fmt.Fprint(res, "Success")
+		}
+	}
 }
