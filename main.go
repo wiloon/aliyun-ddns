@@ -51,7 +51,7 @@ GLOBAL OPTIONS:
 			Name:  "list",
 			Usage: "<domain>",
 			Action: func(c *cli.Context) {
-				pd(GetIp())
+				_, _ = pd(GetIp())
 				/*
 					args := c.Args()
 					if len(args) < 1 {
@@ -136,6 +136,7 @@ func GetIp() string {
 	defer res.Body.Close()
 	body, _ := ioutil.ReadAll(res.Body)
 	ip := regexp.MustCompile(`\d\d\d\.\d\d\d.\d\d\d.\d\d\d`).FindString(string(body))
+	fmt.Println("ip: ", ip)
 	return ip
 }
 
